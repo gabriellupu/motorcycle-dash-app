@@ -1,0 +1,80 @@
+{
+  "expo": {
+    "name": "Moto Dash",
+    "slug": "moto-dash",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "scheme": "motodash",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#05070B",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "requireFullScreen": true,
+      "infoPlist": {
+        "UIBackgroundModes": ["bluetooth-central", "location"],
+        "NSBluetoothAlwaysUsageDescription": "Moto Dash connects to your bike's Bluetooth OBD adapter to read RPM, temperatures, oil pressure and fault codes.",
+        "NSLocationWhenInUseUsageDescription": "Moto Dash uses GPS to show your speed, heading and a live map of your ride.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Moto Dash uses GPS to show your speed, heading and a live map of your ride, including while the screen is docked.",
+        "NSCameraUsageDescription": "Take a photo of your bike so the AI can cut it out and use it as your dash artwork.",
+        "NSPhotoLibraryUsageDescription": "Pick a photo of your bike so the AI can cut it out and use it as your dash artwork."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#05070B",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "package": "com.motodash.app",
+      "predictiveBackGestureEnabled": false,
+      "permissions": [
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.CAMERA"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-dev-client",
+      [
+        "expo-build-properties",
+        {
+          "android": { "minSdkVersion": 24 },
+          "ios": { "deploymentTarget": "16.4" }
+        }
+      ],
+      [
+        "react-native-ble-plx",
+        {
+          "isBackgroundEnabled": true,
+          "modes": ["peripheral", "central"],
+          "bluetoothAlwaysPermission": "Moto Dash connects to your bike's Bluetooth OBD adapter to read live engine data."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Moto Dash uses GPS to show speed, heading and your route on the dash."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Pick a photo of your bike so the AI can turn it into dash artwork.",
+          "cameraPermission": "Take a photo of your bike so the AI can turn it into dash artwork."
+        }
+      ],
+      "expo-image"
+    ],
+    "experiments": {
+      "typedRoutes": false
+    }
+  }
+}
