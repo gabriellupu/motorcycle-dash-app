@@ -19,7 +19,7 @@ const KEEP_AWAKE_TAG = 'moto-dash';
  */
 export function useDashSession(active: boolean): void {
   const settings = useAppStore((s) => s.settings);
-  const bike = useAppStore((s) => s.bike);
+  const vehicle = useAppStore((s) => s.vehicle);
 
   /* GPS ------------------------------------------------------------------ */
   useEffect(() => {
@@ -47,9 +47,9 @@ export function useDashSession(active: boolean): void {
       if (demoTransport.running) demoTransport.stop();
       return;
     }
-    demoTransport.start(bike);
+    demoTransport.start(vehicle);
     return () => demoTransport.stop();
-  }, [active, settings.demoMode, bike]);
+  }, [active, settings.demoMode, vehicle]);
 
   /* Bluetooth auto-connect ------------------------------------------------ */
   useEffect(() => {

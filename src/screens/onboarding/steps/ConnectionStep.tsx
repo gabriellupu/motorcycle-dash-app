@@ -4,6 +4,7 @@ import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import { Button } from '../../../components/ui/Controls';
 import { Panel } from '../../../components/ui/Panel';
 import { Txt } from '../../../components/ui/Txt';
+import { VehicleType } from '../../../data/vehicles';
 import { bleService } from '../../../services/ble/BleService';
 import { useAppStore } from '../../../state/appStore';
 import { useLiveStore } from '../../../state/liveStore';
@@ -19,11 +20,13 @@ import { OnboardingScaffold } from '../OnboardingScaffold';
 export function ConnectionStep({
   step,
   stepCount,
+  vehicleType,
   onBack,
   onNext,
 }: {
   step: number;
   stepCount: number;
+  vehicleType: VehicleType;
   onBack: () => void;
   onNext: (choice: 'ble' | 'demo' | 'skip') => void;
 }) {
@@ -73,8 +76,12 @@ export function ConnectionStep({
     <OnboardingScaffold
       step={step}
       stepCount={stepCount}
-      title="Plug into the bike?"
-      subtitle="A Bluetooth OBD adapter (ELM327 and friends) unlocks RPM, gear, coolant and oil temperature, battery voltage and stored fault codes. Without one the dash still runs on GPS."
+      title={vehicleType === 'car' ? 'Plug into the car?' : 'Plug into the bike?'}
+      subtitle={
+        vehicleType === 'car'
+          ? 'Every car since 2001 has an OBD-II port under the dash. A cheap Bluetooth adapter (ELM327 and friends) unlocks RPM, coolant and intake temperature, throttle, battery voltage, fuel level and stored fault codes. Without one the dash still runs on GPS.'
+          : 'A Bluetooth OBD adapter (ELM327 and friends) unlocks RPM, gear, coolant and oil temperature, battery voltage and stored fault codes. Bike coverage varies by model. Without one the dash still runs on GPS.'
+      }
       footer={
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <Button label="Back" variant="ghost" onPress={onBack} style={{ flex: 0.5 }} />
@@ -214,7 +221,7 @@ export function ConnectionStep({
             />
           </View>
           <Txt variant="caption" faint>
-            Demo mode animates a simulated ride so you can see every gauge. It is always labelled
+            Demo mode animates a simulated drive so you can see every gauge. It is always labelled
             DEMO on the dash.
           </Txt>
         </Panel>

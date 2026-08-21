@@ -11,7 +11,7 @@ import Animated, {
   withTiming,
 } from 'react-native-reanimated';
 
-import { VectorBike } from '../../../components/bike/VectorBike';
+import { VectorMotorcycle } from '../../../components/vehicle/VectorVehicle';
 import { Button } from '../../../components/ui/Controls';
 import { Txt } from '../../../components/ui/Txt';
 import { useLayout } from '../../../hooks/useLayout';
@@ -20,7 +20,7 @@ import { rgba } from '../../../utils/color';
 import { OnboardingScaffold } from '../OnboardingScaffold';
 
 /**
- * First contact: the bike rotates in out of the dark while the tagline lands.
+ * First contact: the vehicle rotates in out of the dark while the tagline lands.
  * Sets the tone for the whole app in about a second and a half.
  */
 export function WelcomeStep({
@@ -66,30 +66,30 @@ export function WelcomeStep({
     transform: [{ scale: interpolate(spin.value, [0, 1], [0.6, 1]) }],
   }));
 
-  const bikeSize = layout.isLandscape ? layout.width * 0.4 : layout.width * 0.86;
+  const artSize = layout.isLandscape ? layout.width * 0.4 : layout.width * 0.86;
 
   return (
     <OnboardingScaffold
       step={step}
       stepCount={stepCount}
-      title="Your bike, your dash."
-      subtitle="A digital cluster built around your motorcycle: AI artwork of your actual bike, GPS speed out of the box, and full engine telemetry when you plug in a Bluetooth OBD adapter."
+      title="Your vehicle, your dash."
+      subtitle="A digital cluster built around your bike or your car: AI artwork of the actual vehicle in your garage, GPS speed out of the box, and full engine telemetry when you plug in a Bluetooth OBD adapter."
       aside={
         <View style={{ alignItems: 'center', justifyContent: 'center' }}>
           <Animated.View
             style={[
               {
                 position: 'absolute',
-                width: bikeSize * 0.9,
-                height: bikeSize * 0.45,
-                borderRadius: bikeSize,
+                width: artSize * 0.9,
+                height: artSize * 0.45,
+                borderRadius: artSize,
                 backgroundColor: rgba(theme.colors.glow, 0.16),
               },
               glowStyle,
             ]}
           />
           <Animated.View style={bikeStyle}>
-            <VectorBike size={bikeSize} />
+            <VectorMotorcycle size={artSize} />
           </Animated.View>
         </View>
       }
@@ -102,9 +102,15 @@ export function WelcomeStep({
     >
       <View style={{ gap: 12, justifyContent: 'center', flex: 1 }}>
         {[
-          ['AI artwork', 'Pick your make, model and year — or photograph your own bike and let the AI cut it out.'],
+          [
+            'Your actual vehicle',
+            'Photograph it from a few angles — mods, wheels and paint included — and the AI cuts it out to real transparency.',
+          ],
           ['GPS first', 'Speed, heading and a live map with no wiring at all.'],
-          ['Full telemetry', 'RPM, temperatures, oil pressure and fault codes over a Bluetooth OBD dongle.'],
+          [
+            'Full telemetry',
+            'RPM, temperatures, oil pressure and fault codes over a Bluetooth OBD dongle.',
+          ],
         ].map(([title, body]) => (
           <View key={title} style={{ flexDirection: 'row', gap: 12 }}>
             <View

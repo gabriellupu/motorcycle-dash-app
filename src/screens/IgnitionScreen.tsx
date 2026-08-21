@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Platform, Pressable } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
-import { BikeStage } from '../components/dash/BikeStage';
+import { VehicleStage } from '../components/dash/VehicleStage';
 import { Gauge } from '../components/dash/Gauge';
 import { RpmBar } from '../components/dash/RpmBar';
 import { WarningLights } from '../components/dash/WarningLights';
@@ -13,12 +13,12 @@ import { useLayout } from '../hooks/useLayout';
 import { navigate } from '../navigation/router';
 import { computeWarnings } from '../services/warnings';
 import { useAppStore } from '../state/appStore';
-import { emptyTelemetry } from '../state/types';
+import { emptyTelemetry, isElectricProfile } from '../state/types';
 import { useTheme } from '../theme/ThemeProvider';
 
 /**
- * Ignition-on sequence — the cluster self-test every bike does, plus a bike
- * that rotates in out of nothing.
+ * Ignition-on sequence — the cluster self-test every vehicle does, plus the
+ * bike or car rotating in out of nothing.
  *
  * Timeline (~3.4 s, tap to skip):
  *   0.0  lamp self-test, all bulbs lit
@@ -31,7 +31,7 @@ export function IgnitionScreen() {
   const theme = useTheme();
   const layout = useLayout();
   const settings = useAppStore((s) => s.settings);
-  const bike = useAppStore((s) => s.bike);
+  const vehicle = useAppStore((s) => s.vehicle);
 
   const [stage, setStage] = useState(0);
   const reduce = settings.animations !== 'full';
@@ -64,17 +64,22 @@ export function IgnitionScreen() {
   );
 
   const gaugeSize = Math.min(layout.width * 0.72, layout.height * (layout.isLandscape ? 0.6 : 0.4));
-  const maxSpeed = bike?.maxSpeedKph ?? 220;
-  const maxRpm = bike?.maxRpm ?? 12_000;
+  const maxSpeed = vehicle?.maxSpeedKph ?? 220;
+  const maxRpm = vehicle?.maxRpm ?? 12_000;
+  const electric = isElectricProfile(vehicle);
 
   // Stage 1 pins every gauge to full scale; stage 2 lets them fall back.
   const sweepSpeed = stage === 1 ? maxSpeed : 0;
   const sweepRpm = stage === 1 ? maxRpm : 0;
 
   const frames = useMemo(() => {
-    if (!settings.showBike) return [];
-    return bike?.angleUris?.length ? [...bike.angleUris].reverse() : bike?.heroUri ? [bike.heroUri] : [];
-  }, [bike?.angleUris, bike?.heroUri, settings.showBike]);
+    if (!settings.showVehicle) return [];
+    return vehicle?.angleUris?.length
+      ? vehicle.angleUris
+      : vehicle?.heroUri
+        ? [vehicle.heroUri]
+        : [];
+  }, [vehicle?.angleUris, vehicle?.heroUri, settings.showVehicle]);
 
   return (
     <ScreenBackground>
@@ -89,17 +94,19 @@ export function IgnitionScreen() {
             {stage >= 3 ? 'Systems ready' : 'Ignition'}
           </Txt>
           <Txt variant="title" size={layout.isTablet ? 30 : 22}>
-            {stage >= 2 && bike ? `${bike.make} ${bike.model}` : 'MOTO DASH'}
+            {stage >= 2 && vehicle ? `${vehicle.make} ${vehicle.model}` : 'MOTO DASH'}
           </Txt>
         </Animated.View>
 
-        <RpmBar
-          rpm={sweepRpm}
-          redlineRpm={bike?.redlineRpm ?? 10_500}
-          maxRpm={maxRpm}
-          width={Math.min(layout.width - 48, 520)}
-          showScale={false}
-        />
+        {electric ? null : (
+          <RpmBar
+            rpm={sweepRpm}
+            redlineRpm={vehicle?.redlineRpm ?? 10_500}
+            maxRpm={maxRpm}
+            width={Math.min(layout.width - 48, 520)}
+            showScale={false}
+          />
+        )}
 
         <Gauge
           value={sweepSpeed}
@@ -115,11 +122,13 @@ export function IgnitionScreen() {
 
         {stage >= 2 ? (
           <Animated.View entering={FadeIn.duration(400)}>
-            <BikeStage
+            <VehicleStage
               frames={frames}
+              vehicleType={vehicle?.type ?? 'motorcycle'}
+              bodyStyle={vehicle?.bodyStyle}
               width={Math.min(layout.width * 0.8, 460)}
               height={Math.min(layout.height * 0.24, 190)}
-              side={settings.bikeSide}
+              side={settings.vehicleSide}
               animateIn
               reduceMotion={reduce}
             />

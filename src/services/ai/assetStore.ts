@@ -1,36 +1,36 @@
 /**
- * Where bike artwork lives on disk, and how it gets there.
+ * Where vehicle artwork lives on disk, and how it gets there.
  *
- * Files are kept in `<documents>/bike-assets/<bikeId>/` so a profile owns its
- * renders and deleting a bike from the garage can take its artwork with it.
+ * Files are kept in `<documents>/vehicle-assets/<vehicleId>/` so a profile owns
+ * its photos and renders, and removing it from the garage takes them with it.
  */
 
 import { Directory, File, Paths } from 'expo-file-system';
 
-const ROOT = 'bike-assets';
+const ROOT = 'vehicle-assets';
 
-function bikeDir(bikeId: string): Directory {
-  const dir = new Directory(Paths.document, ROOT, bikeId);
+function vehicleDir(vehicleId: string): Directory {
+  const dir = new Directory(Paths.document, ROOT, vehicleId);
   if (!dir.exists) dir.create({ intermediates: true, idempotent: true });
   return dir;
 }
 
 /** Writes a base64 PNG and returns its file:// URI. */
-export function saveBase64Png(bikeId: string, name: string, base64: string): string {
-  const dir = bikeDir(bikeId);
+export function saveBase64Png(vehicleId: string, name: string, base64: string): string {
+  const dir = vehicleDir(vehicleId);
   const file = new File(dir, `${name}.png`);
   file.create({ overwrite: true, intermediates: true });
   file.write(base64, { encoding: 'base64' });
   return file.uri;
 }
 
-/** Copies an arbitrary local image (camera roll, camera) into the bike folder. */
-export async function copyIntoBike(
-  bikeId: string,
+/** Copies an arbitrary local image (camera roll, camera) into the vehicle folder. */
+export async function copyIntoVehicle(
+  vehicleId: string,
   name: string,
   sourceUri: string,
 ): Promise<string> {
-  const dir = bikeDir(bikeId);
+  const dir = vehicleDir(vehicleId);
   const extension = sourceUri.split('?')[0].split('.').pop()?.slice(0, 4) || 'jpg';
   const target = new File(dir, `${name}.${extension}`);
   if (target.exists) target.delete();
@@ -42,8 +42,8 @@ export async function readAsBase64(uri: string): Promise<string> {
   return new File(uri).base64();
 }
 
-export function deleteBikeAssets(bikeId: string): void {
-  const dir = new Directory(Paths.document, ROOT, bikeId);
+export function deleteVehicleAssets(vehicleId: string): void {
+  const dir = new Directory(Paths.document, ROOT, vehicleId);
   if (dir.exists) dir.delete();
 }
 

@@ -7,7 +7,7 @@ import { CUSTOM_THEME_ID, CustomThemeSpec, makeCustomTheme } from '../theme/cust
 import { DEFAULT_THEME_ID, getTheme, registerTheme } from '../theme/themes';
 import { Theme } from '../theme/types';
 
-import { BikeProfile, Settings } from './types';
+import { VehicleProfile, Settings } from './types';
 
 export const DEFAULT_SETTINGS: Settings = {
   themeId: DEFAULT_THEME_ID,
@@ -15,9 +15,9 @@ export const DEFAULT_SETTINGS: Settings = {
   units: 'metric',
   clock24h: true,
 
-  bikeSide: 'left',
-  bikeScale: 1,
-  showBike: true,
+  vehicleSide: 'left',
+  vehicleScale: 1,
+  showVehicle: true,
 
   showMap: true,
   mapStyleId: DEFAULT_MAP_STYLE_ID,
@@ -62,8 +62,8 @@ export const DEFAULT_SETTINGS: Settings = {
 
 interface AppState {
   settings: Settings;
-  bike: BikeProfile | null;
-  garage: BikeProfile[];
+  vehicle: VehicleProfile | null;
+  garage: VehicleProfile[];
   hydrated: boolean;
 
   setSetting: <K extends keyof Settings>(key: K, value: Settings[K]) => void;
@@ -74,9 +74,9 @@ interface AppState {
   ) => void;
   resetSettings: () => void;
 
-  setBike: (bike: BikeProfile | null) => void;
-  patchBike: (patch: Partial<BikeProfile>) => void;
-  saveToGarage: (bike: BikeProfile) => void;
+  setVehicle: (vehicle: VehicleProfile | null) => void;
+  patchVehicle: (patch: Partial<VehicleProfile>) => void;
+  saveToGarage: (vehicle: VehicleProfile) => void;
   removeFromGarage: (id: string) => void;
   selectFromGarage: (id: string) => void;
 
@@ -89,7 +89,7 @@ export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
       settings: DEFAULT_SETTINGS,
-      bike: null,
+      vehicle: null,
       garage: [],
       hydrated: false,
 
@@ -111,28 +111,28 @@ export const useAppStore = create<AppState>()(
           },
         }),
 
-      setBike: (bike) => set({ bike }),
-      patchBike: (patch) => {
-        const current = get().bike;
+      setVehicle: (vehicle) => set({ vehicle }),
+      patchVehicle: (patch) => {
+        const current = get().vehicle;
         if (!current) return;
         const next = { ...current, ...patch };
         set({
-          bike: next,
-          garage: get().garage.map((b) => (b.id === next.id ? next : b)),
+          vehicle: next,
+          garage: get().garage.map((v) => (v.id === next.id ? next : v)),
         });
       },
-      saveToGarage: (bike) => {
-        const rest = get().garage.filter((b) => b.id !== bike.id);
-        set({ garage: [bike, ...rest].slice(0, 12), bike });
+      saveToGarage: (vehicle) => {
+        const rest = get().garage.filter((v) => v.id !== vehicle.id);
+        set({ garage: [vehicle, ...rest].slice(0, 12), vehicle });
       },
       removeFromGarage: (id) => {
-        const garage = get().garage.filter((b) => b.id !== id);
-        const bike = get().bike?.id === id ? (garage[0] ?? null) : get().bike;
-        set({ garage, bike });
+        const garage = get().garage.filter((v) => v.id !== id);
+        const vehicle = get().vehicle?.id === id ? (garage[0] ?? null) : get().vehicle;
+        set({ garage, vehicle });
       },
       selectFromGarage: (id) => {
-        const found = get().garage.find((b) => b.id === id);
-        if (found) set({ bike: found });
+        const found = get().garage.find((v) => v.id === id);
+        if (found) set({ vehicle: found });
       },
 
       applyCustomTheme: (spec) => {
@@ -140,14 +140,14 @@ export const useAppStore = create<AppState>()(
         set({ settings: { ...get().settings, customTheme: spec, themeId: CUSTOM_THEME_ID } });
       },
       completeOnboarding: () => set({ settings: { ...get().settings, onboarded: true } }),
-      resetEverything: () => set({ settings: DEFAULT_SETTINGS, bike: null, garage: [] }),
+      resetEverything: () => set({ settings: DEFAULT_SETTINGS, vehicle: null, garage: [] }),
     }),
     {
-      name: 'moto-dash/app-v1',
+      name: 'moto-dash/app-v2',
       storage: createJSONStorage(() => AsyncStorage),
       partialize: (state) => ({
         settings: state.settings,
-        bike: state.bike,
+        vehicle: state.vehicle,
         garage: state.garage,
       }),
       merge: (persisted, current) => {
@@ -182,4 +182,4 @@ export function selectTheme(state: AppState): Theme {
 }
 
 export const useSettings = () => useAppStore((s) => s.settings);
-export const useBike = () => useAppStore((s) => s.bike);
+export const useVehicle = () => useAppStore((s) => s.vehicle);

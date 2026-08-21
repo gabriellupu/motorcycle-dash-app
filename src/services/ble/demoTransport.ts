@@ -4,10 +4,12 @@
  * Lets a rider see the full dash — tach, gear, temperatures, warnings — before
  * buying a dongle, and gives us something deterministic to develop against.
  * It is always labelled DEMO on screen so it can never be mistaken for live data.
+ *
+ * A bike leans into the corners; a car reports the same corner as lateral G.
  */
 
 import { useLiveStore } from '../../state/liveStore';
-import { BikeProfile, Telemetry } from '../../state/types';
+import { Telemetry, VehicleProfile } from '../../state/types';
 
 const TICK_MS = 100;
 
@@ -25,6 +27,7 @@ interface DemoState {
 
 class DemoTransport {
   private timer: ReturnType<typeof setInterval> | null = null;
+  private type: VehicleProfile['type'] = 'motorcycle';
   private state: DemoState = {
     t: 0,
     speed: 0,
@@ -41,10 +44,11 @@ class DemoTransport {
     return this.timer != null;
   }
 
-  start(bike: BikeProfile | null): void {
+  start(vehicle: VehicleProfile | null): void {
     if (this.timer) return;
-    const redline = bike?.redlineRpm || 11_000;
-    const topSpeed = bike?.maxSpeedKph || 220;
+    const redline = vehicle?.redlineRpm || 11_000;
+    const topSpeed = vehicle?.maxSpeedKph || 220;
+    this.type = vehicle?.type ?? 'motorcycle';
 
     const live = useLiveStore.getState();
     live.setTransport('demo', 'Simulated ECU', null);
@@ -114,7 +118,7 @@ class DemoTransport {
     const brake = s.throttle < 5 && s.speed > 0 ? 0.9 : 0;
     s.speed = Math.max(0, s.speed + (drive - drag - brake) * 3.2);
 
-    // Top-of-gear speed as a fraction of the bike's top speed, index = gear.
+    // Top-of-gear speed as a fraction of the vehicle's top speed, index = gear.
     const gearRatios = [0, 0.16, 0.26, 0.37, 0.5, 0.66, 1];
     const frac = s.speed / topSpeed;
     let gear = 6;
@@ -137,7 +141,9 @@ class DemoTransport {
     s.coolant += ((78 + load * 26 - s.coolant) * 0.004);
     s.oilTemp += ((72 + load * 34 - s.oilTemp) * 0.003);
     s.fuel = Math.max(0, s.fuel - 0.0009 * (0.4 + s.throttle / 100));
-    s.lean = Math.sin(s.t * 0.55) * (18 + 22 * Math.sin(s.t * 0.13));
+    // One cornering signal, expressed as lean on a bike and lateral G in a car.
+    const corner = Math.sin(s.t * 0.55) * (0.45 + 0.55 * Math.abs(Math.sin(s.t * 0.13)));
+    s.lean = this.type === 'car' ? 0 : corner * 40;
 
     const oilPressure = 0.9 + (s.rpm / redline) * 3.4;
 
@@ -156,7 +162,9 @@ class DemoTransport {
       batteryV: Math.round((13.9 + Math.sin(s.t * 0.7) * 0.25) * 100) / 100,
       intakeC: Math.round(24 + load * 12),
       ambientC: 21,
-      leanDeg: Math.round(s.lean * 10) / 10,
+      leanDeg: this.type === 'car' ? null : Math.round(s.lean * 10) / 10,
+      gLat: Math.round(corner * 100) / 100,
+      gLon: Math.round(((drive - drag - brake) * 0.35) * 100) / 100,
       mil: false,
       dtcCodes: [],
     };

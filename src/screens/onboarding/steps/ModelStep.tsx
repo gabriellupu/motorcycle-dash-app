@@ -1,76 +1,88 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
-import { BikeAutocomplete } from '../../../components/ui/Autocomplete';
+import { VehicleAutocomplete } from '../../../components/ui/Autocomplete';
 import { Button, Field } from '../../../components/ui/Controls';
 import { Panel } from '../../../components/ui/Panel';
 import { Txt } from '../../../components/ui/Txt';
-import { BikeCatalogEntry, findEntry, yearsFor } from '../../../data/motorcycles';
+import {
+  CarBodyStyle,
+  VehicleCatalogEntry,
+  VehicleType,
+  findEntry,
+  yearsFor,
+} from '../../../data/vehicles';
+import { VehicleProfile } from '../../../state/types';
 import { useTheme } from '../../../theme/ThemeProvider';
-import { BikeProfile } from '../../../state/types';
 import { OnboardingScaffold } from '../OnboardingScaffold';
 
-export interface BikeDraft {
+export interface VehicleDraft {
+  type: VehicleType;
   make: string;
   model: string;
   year: number;
   displacementCc?: number;
+  bodyStyle?: CarBodyStyle;
+  colorHint?: string;
   redlineRpm: number;
   maxRpm: number;
   maxSpeedKph: number;
 }
 
 /** Make/model/year selection, with a hand-entry path for anything exotic. */
-export function BikeStep({
+export function ModelStep({
   step,
   stepCount,
+  type,
   initial,
   onBack,
   onNext,
 }: {
   step: number;
   stepCount: number;
-  initial?: BikeProfile | null;
+  type: VehicleType;
+  initial?: VehicleProfile | null;
   onBack: () => void;
-  onNext: (draft: BikeDraft) => void;
+  onNext: (draft: VehicleDraft) => void;
 }) {
   const theme = useTheme();
   const currentYear = new Date().getFullYear();
+  const isCar = type === 'car';
 
-  const [entry, setEntry] = useState<BikeCatalogEntry | null>(() =>
-    initial ? (findEntry(initial.make, initial.model) ?? null) : null,
+  const [entry, setEntry] = useState<VehicleCatalogEntry | null>(() =>
+    initial && initial.type === type ? (findEntry(type, initial.make, initial.model) ?? null) : null,
   );
   const [manual, setManual] = useState<{ make: string; model: string } | null>(() =>
-    initial && !findEntry(initial.make, initial.model)
+    initial && initial.type === type && !findEntry(type, initial.make, initial.model)
       ? { make: initial.make, model: initial.model }
       : null,
   );
   const [year, setYear] = useState<number>(initial?.year ?? currentYear);
+  const [colorHint, setColorHint] = useState(initial?.colorHint ?? '');
 
   const years = useMemo(() => {
     if (entry) return yearsFor(entry);
     const out: number[] = [];
-    for (let y = currentYear + 1; y >= 1970; y--) out.push(y);
+    for (let y = currentYear + 1; y >= 1960; y--) out.push(y);
     return out;
   }, [entry, currentYear]);
 
-  const chosen = entry
-    ? { make: entry.make, model: entry.model }
-    : manual
-      ? manual
-      : null;
+  const chosen = entry ? { make: entry.make, model: entry.model } : manual;
 
   const submit = () => {
     if (!chosen) return;
-    const redline = entry?.redlineRpm || 10_500;
+    const redline = entry?.redlineRpm || (isCar ? 6500 : 10_500);
     onNext({
+      type,
       make: chosen.make,
       model: chosen.model,
       year,
       displacementCc: entry?.displacementCc,
-      redlineRpm: redline || 10_500,
-      maxRpm: Math.round((redline || 10_500) * 1.12),
-      maxSpeedKph: entry?.topSpeedKph || 200,
+      bodyStyle: entry?.bodyStyle ?? (isCar ? 'hatch' : undefined),
+      colorHint: colorHint.trim() || undefined,
+      redlineRpm: redline,
+      maxRpm: Math.round(redline * 1.12),
+      maxSpeedKph: entry?.topSpeedKph || (isCar ? 200 : 200),
     });
   };
 
@@ -78,13 +90,13 @@ export function BikeStep({
     <OnboardingScaffold
       step={step}
       stepCount={stepCount}
-      title="Which bike is this?"
-      subtitle="It sets the tach scale, the redline and what the AI draws. You can change any of it later."
+      title={isCar ? 'Which car is this?' : 'Which bike is this?'}
+      subtitle="It sets the tach scale, the redline and what the AI knows about your vehicle. All of it is editable later."
       footer={
         <View style={{ flexDirection: 'row', gap: 10 }}>
           <Button label="Back" variant="ghost" onPress={onBack} style={{ flex: 0.5 }} />
           <Button
-            label={chosen ? `Continue with ${chosen.model}` : 'Pick a bike'}
+            label={chosen ? `Continue with ${chosen.model}` : 'Pick a model'}
             onPress={submit}
             disabled={!chosen}
             size="lg"
@@ -93,7 +105,10 @@ export function BikeStep({
         </View>
       }
     >
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 16, paddingBottom: 12 }}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ gap: 16, paddingBottom: 12 }}
+      >
         {chosen ? (
           <Panel>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -106,8 +121,10 @@ export function BikeStep({
                 </Txt>
                 <Txt variant="caption" dim>
                   {entry
-                    ? `${entry.displacementCc ? `${entry.displacementCc} cc · ` : 'Electric · '}redline ${entry.redlineRpm.toLocaleString()} rpm`
-                    : 'Custom entry — check the tach limits in Settings'}
+                    ? `${entry.displacementCc ? `${entry.displacementCc} cc · ` : 'Electric · '}${
+                        entry.redlineRpm ? `redline ${entry.redlineRpm.toLocaleString()} rpm` : 'no tach'
+                      }`
+                    : 'Custom entry — check the gauge limits in Settings'}
                 </Txt>
               </View>
               <Button
@@ -122,7 +139,8 @@ export function BikeStep({
             </View>
           </Panel>
         ) : (
-          <BikeAutocomplete
+          <VehicleAutocomplete
+            type={type}
             onSelect={(selected) => {
               setEntry(selected);
               setManual(null);
@@ -145,7 +163,7 @@ export function BikeStep({
               value={manual.make}
               onChangeText={(value) => setManual({ ...manual, make: value })}
               autoCapitalize="words"
-              placeholder="e.g. Bimota"
+              placeholder={isCar ? 'e.g. Koenigsegg' : 'e.g. Bimota'}
             />
             <Txt variant="label" dim>
               Model
@@ -154,7 +172,7 @@ export function BikeStep({
               value={manual.model}
               onChangeText={(value) => setManual({ ...manual, model: value })}
               autoCapitalize="words"
-              placeholder="e.g. Tesi H2"
+              placeholder={isCar ? 'e.g. Jesko' : 'e.g. Tesi H2'}
             />
           </View>
         ) : null}
@@ -185,17 +203,30 @@ export function BikeStep({
                     backgroundColor: active ? theme.colors.accent : theme.colors.surface,
                   }}
                 >
-                  <Txt
-                    variant="value"
-                    size={15}
-                    color={active ? theme.colors.bg : theme.colors.text}
-                  >
+                  <Txt variant="value" size={15} color={active ? theme.colors.bg : theme.colors.text}>
                     {String(option)}
                   </Txt>
                 </Pressable>
               );
             })}
           </ScrollView>
+        </View>
+
+        <View style={{ gap: 8 }}>
+          <Txt variant="label" dim>
+            Colour and modifications (optional)
+          </Txt>
+          <Field
+            value={colorHint}
+            onChangeText={setColorHint}
+            autoCapitalize="sentences"
+            placeholder={
+              isCar ? 'Nardo grey, black wheels, lowered' : 'Matte black, Akrapovič, tail tidy'
+            }
+          />
+          <Txt variant="caption" faint style={{ lineHeight: 16 }}>
+            Your photos do most of the work, but anything you note here goes into the AI prompt too.
+          </Txt>
         </View>
       </ScrollView>
     </OnboardingScaffold>

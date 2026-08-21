@@ -2,14 +2,14 @@ import { Image } from 'expo-image';
 import React from 'react';
 import { ScrollView, View } from 'react-native';
 
-import { VectorBike } from '../../../components/bike/VectorBike';
+import { VectorVehicle } from '../../../components/vehicle/VectorVehicle';
 import { ThemePicker } from '../../../components/settings/ThemePicker';
 import { Button, Segmented } from '../../../components/ui/Controls';
 import { Panel } from '../../../components/ui/Panel';
 import { Txt } from '../../../components/ui/Txt';
 import { useAppStore } from '../../../state/appStore';
 import { useLiveStore } from '../../../state/liveStore';
-import { BikeProfile } from '../../../state/types';
+import { VehicleProfile } from '../../../state/types';
 import { useTheme } from '../../../theme/ThemeProvider';
 import { OnboardingScaffold } from '../OnboardingScaffold';
 
@@ -17,13 +17,13 @@ import { OnboardingScaffold } from '../OnboardingScaffold';
 export function ReadyStep({
   step,
   stepCount,
-  bike,
+  vehicle,
   onBack,
   onFinish,
 }: {
   step: number;
   stepCount: number;
-  bike: BikeProfile;
+  vehicle: VehicleProfile;
   onBack: () => void;
   onFinish: () => void;
 }) {
@@ -56,31 +56,31 @@ export function ReadyStep({
         <Panel style={{ gap: 12 }}>
           <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
             <View style={{ width: 120, height: 74, justifyContent: 'center' }}>
-              {bike.heroUri ? (
+              {vehicle.heroUri ? (
                 <Image
-                  source={{ uri: bike.heroUri }}
+                  source={{ uri: vehicle.heroUri }}
                   style={{ width: 120, height: 74 }}
                   contentFit="contain"
                 />
               ) : (
-                <VectorBike size={120} />
+                <VectorVehicle type={vehicle.type} bodyStyle={vehicle.bodyStyle} size={120} />
               )}
             </View>
             <View style={{ flex: 1, gap: 2 }}>
               <Txt variant="heading" size={16}>
-                {`${bike.year} ${bike.make}`}
+                {`${vehicle.year} ${vehicle.make}`}
               </Txt>
               <Txt variant="title" size={20}>
-                {bike.model}
+                {vehicle.model}
               </Txt>
               <Txt variant="caption" dim>
-                {`Redline ${bike.redlineRpm.toLocaleString()} rpm · scale to ${bike.maxSpeedKph} km/h`}
+                {`Redline ${vehicle.redlineRpm.toLocaleString()} rpm · scale to ${vehicle.maxSpeedKph} km/h`}
               </Txt>
             </View>
           </View>
 
           <View style={{ gap: 6 }}>
-            <Row label="Artwork" value={describeOrigin(bike.assetOrigin)} />
+            <Row label="Artwork" value={describeOrigin(vehicle)} />
             <Row
               label="Engine data"
               value={
@@ -111,11 +111,11 @@ export function ReadyStep({
 
         <View style={{ gap: 8 }}>
           <Txt variant="label" dim>
-            Bike sits on the
+            Vehicle sits on the
           </Txt>
           <Segmented
-            value={settings.bikeSide}
-            onChange={(bikeSide) => patchSettings({ bikeSide })}
+            value={settings.vehicleSide}
+            onChange={(vehicleSide) => patchSettings({ vehicleSide })}
             options={[
               { value: 'left', label: 'Left' },
               { value: 'right', label: 'Right' },
@@ -146,13 +146,14 @@ function Row({ label, value }: { label: string; value: string }) {
   );
 }
 
-function describeOrigin(origin: BikeProfile['assetOrigin']): string {
-  switch (origin) {
+function describeOrigin(vehicle: VehicleProfile): string {
+  const shots = vehicle.photos.filter((p) => p.assetUri).length;
+  switch (vehicle.assetOrigin) {
     case 'ai-generated':
-      return 'AI studio render, background keyed out';
+      return `Catalogue render, background keyed out${shots > 1 ? ` · ${shots} angles` : ''}`;
     case 'ai-cutout':
-      return 'Your photo, background removed';
+      return `Your own photos, cut out${shots > 1 ? ` · ${shots} angles` : ''}`;
     default:
-      return 'Built-in vector bike';
+      return 'Built-in vector silhouette';
   }
 }

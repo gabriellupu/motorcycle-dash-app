@@ -3,19 +3,28 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BikeStage } from '../components/dash/BikeStage';
-import { GearIndicator, LeanMeter, SpeedReadout, StatusChip, Tile } from '../components/dash/DashWidgets';
+import { VehicleStage } from '../components/dash/VehicleStage';
+import {
+  GForceMeter,
+  GearIndicator,
+  LeanMeter,
+  SpeedReadout,
+  StatusChip,
+  Tile,
+} from '../components/dash/DashWidgets';
 import { Gauge } from '../components/dash/Gauge';
 import { MapPreview } from '../components/dash/MapPreview';
 import { RpmBar } from '../components/dash/RpmBar';
 import { WarningLights } from '../components/dash/WarningLights';
 import { ScreenBackground } from '../components/ui/ScreenBackground';
 import { Txt } from '../components/ui/Txt';
+import { CarBodyStyle, VehicleType } from '../data/vehicles';
 import { useLayout } from '../hooks/useLayout';
 import { navigate } from '../navigation/router';
 import { computeWarnings } from '../services/warnings';
 import { useAppStore } from '../state/appStore';
 import { useLiveStore } from '../state/liveStore';
+import { isElectricProfile } from '../state/types';
 import { useTheme } from '../theme/ThemeProvider';
 import { rgba } from '../utils/color';
 import {
@@ -41,14 +50,16 @@ import {
  * Two hand-built layouts — portrait and landscape — that both fit on one screen
  * with no scrolling, because you cannot scroll a dash at 120 km/h. Everything
  * reads from the same telemetry snapshot; what changes between layouts is only
- * where things sit and how big they get.
+ * where things sit and how big they get. Bikes and cars share it: the vehicle
+ * type only decides the stand-in artwork and which of the lean / lateral-G
+ * widgets is worth showing.
  */
-export function DashScreen({ animateBike }: { animateBike?: boolean }) {
+export function DashScreen({ animateIn }: { animateIn?: boolean }) {
   const theme = useTheme();
   const layout = useLayout();
   const insets = useSafeAreaInsets();
   const settings = useAppStore((s) => s.settings);
-  const bike = useAppStore((s) => s.bike);
+  const vehicle = useAppStore((s) => s.vehicle);
 
   const telemetry = useLiveStore((s) => s.telemetry);
   const available = useLiveStore((s) => s.availableChannels);
@@ -81,14 +92,18 @@ export function DashScreen({ animateBike }: { animateBike?: boolean }) {
     }
   }, [warnings, settings.hapticAlerts]);
 
-  const maxRpm = bike?.maxRpm ?? 12_000;
-  const redlineRpm = bike?.redlineRpm ?? 10_500;
-  const maxSpeed = bike?.maxSpeedKph ?? 220;
+  const maxRpm = vehicle?.maxRpm ?? 12_000;
+  const redlineRpm = vehicle?.redlineRpm ?? 10_500;
+  const maxSpeed = vehicle?.maxSpeedKph ?? 220;
+  const electric = isElectricProfile(vehicle);
   const frames = useMemo(() => {
-    if (!settings.showBike) return [];
-    const list = bike?.angleUris?.length ? bike.angleUris : bike?.heroUri ? [bike.heroUri] : [];
-    return list;
-  }, [bike?.angleUris, bike?.heroUri, settings.showBike]);
+    if (!settings.showVehicle) return [];
+    return vehicle?.angleUris?.length
+      ? vehicle.angleUris
+      : vehicle?.heroUri
+        ? [vehicle.heroUri]
+        : [];
+  }, [vehicle?.angleUris, vehicle?.heroUri, settings.showVehicle]);
 
   const speedDisplay = padSpeed(speedIn(units, telemetry.speedKph));
   const intensity = Math.min(1, (telemetry.rpm ?? 0) / Math.max(1, redlineRpm));
@@ -227,9 +242,12 @@ export function DashScreen({ animateBike }: { animateBike?: boolean }) {
     <LandscapeDash
       layout={layout}
       frames={frames}
-      side={settings.bikeSide}
-      bikeScale={settings.bikeScale}
-      animateBike={animateBike}
+      side={settings.vehicleSide}
+      vehicleScale={settings.vehicleScale}
+      animateIn={animateIn}
+      vehicleType={vehicle?.type ?? 'motorcycle'}
+      bodyStyle={vehicle?.bodyStyle}
+      electric={electric}
       telemetry={telemetry}
       speedDisplay={speedDisplay}
       speedUnitLabel={speedUnit(units)}
@@ -250,9 +268,12 @@ export function DashScreen({ animateBike }: { animateBike?: boolean }) {
     <PortraitDash
       layout={layout}
       frames={frames}
-      side={settings.bikeSide}
-      bikeScale={settings.bikeScale}
-      animateBike={animateBike}
+      side={settings.vehicleSide}
+      vehicleScale={settings.vehicleScale}
+      animateIn={animateIn}
+      vehicleType={vehicle?.type ?? 'motorcycle'}
+      bodyStyle={vehicle?.bodyStyle}
+      electric={electric}
       telemetry={telemetry}
       speedDisplay={speedDisplay}
       speedUnitLabel={speedUnit(units)}
@@ -295,8 +316,11 @@ type DashSectionProps = {
   layout: ReturnType<typeof useLayout>;
   frames: string[];
   side: 'left' | 'right';
-  bikeScale: number;
-  animateBike?: boolean;
+  vehicleScale: number;
+  animateIn?: boolean;
+  vehicleType: VehicleType;
+  bodyStyle?: CarBodyStyle;
+  electric: boolean;
   telemetry: ReturnType<typeof useLiveStore.getState>['telemetry'];
   speedDisplay: string;
   speedUnitLabel: string;
@@ -326,8 +350,11 @@ function PortraitDash(props: DashSectionProps) {
     layout,
     frames,
     side,
-    bikeScale,
-    animateBike,
+    vehicleScale,
+    animateIn,
+    vehicleType,
+    bodyStyle,
+    electric,
     telemetry,
     speedDisplay,
     speedUnitLabel,
@@ -357,13 +384,15 @@ function PortraitDash(props: DashSectionProps) {
         {settingsButton}
       </View>
 
-      <RpmBar
-        rpm={telemetry.rpm}
-        redlineRpm={redlineRpm}
-        maxRpm={maxRpm}
-        width={stripWidth}
-        inactive={!hasEngine}
-      />
+      {electric ? null : (
+        <RpmBar
+          rpm={telemetry.rpm}
+          redlineRpm={redlineRpm}
+          maxRpm={maxRpm}
+          width={stripWidth}
+          inactive={!hasEngine}
+        />
+      )}
 
       {/* The speedometer absorbs the slack so the cluster fills the screen. */}
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -385,12 +414,14 @@ function PortraitDash(props: DashSectionProps) {
 
       <View style={{ flexDirection: 'row', gap: theme.shape.gap, alignItems: 'center' }}>
         <View style={{ alignItems: side === 'left' ? 'flex-start' : 'flex-end' }}>
-          <BikeStage
+          <VehicleStage
             frames={frames}
-            width={stageWidth * bikeScale}
+            vehicleType={vehicleType}
+            bodyStyle={bodyStyle}
+            width={stageWidth * vehicleScale}
             height={stageHeight}
             side={side}
-            animateIn={animateBike}
+            animateIn={animateIn}
             leanDeg={telemetry.leanDeg ?? 0}
             intensity={intensity}
             reduceMotion={reduceMotion}
@@ -401,6 +432,8 @@ function PortraitDash(props: DashSectionProps) {
             <GearIndicator gear={gearLabel(telemetry.gear, (telemetry.speedKph ?? 0) > 3)} size={58} />
             {settings.showLeanAngle ? (
               <LeanMeter leanDeg={telemetry.leanDeg} maxLeanDeg={trip.maxLeanDeg} size={104} />
+            ) : settings.showGForce ? (
+              <GForceMeter gLat={telemetry.gLat} gLon={telemetry.gLon} size={86} />
             ) : null}
           </View>
           {settings.showMap ? (
@@ -439,8 +472,11 @@ function LandscapeDash(props: DashSectionProps) {
     layout,
     frames,
     side,
-    bikeScale,
-    animateBike,
+    vehicleScale,
+    animateIn,
+    vehicleType,
+    bodyStyle,
+    electric,
     telemetry,
     speedDisplay,
     speedUnitLabel,
@@ -461,20 +497,22 @@ function LandscapeDash(props: DashSectionProps) {
   const gap = theme.shape.gap;
   const columnGap = gap;
   const usableWidth = layout.width - gap * 2 - columnGap * 2;
-  const bikeColumn = usableWidth * 0.32;
+  const vehicleColumn = usableWidth * 0.32;
   const centerColumn = usableWidth * 0.4;
   const rightColumn = usableWidth * 0.28;
   const gaugeSize = Math.min(centerColumn, layout.height * 0.52);
   const stageHeight = layout.height * (settings.showMap ? 0.46 : 0.72);
 
-  const bikePanel = (
-    <View style={{ width: bikeColumn, gap }}>
-      <BikeStage
+  const vehiclePanel = (
+    <View style={{ width: vehicleColumn, gap }}>
+      <VehicleStage
         frames={frames}
-        width={bikeColumn * bikeScale}
+        vehicleType={vehicleType}
+        bodyStyle={bodyStyle}
+        width={vehicleColumn * vehicleScale}
         height={stageHeight}
         side={side}
-        animateIn={animateBike}
+        animateIn={animateIn}
         leanDeg={telemetry.leanDeg ?? 0}
         intensity={intensity}
         reduceMotion={reduceMotion}
@@ -487,7 +525,7 @@ function LandscapeDash(props: DashSectionProps) {
           zoom={settings.mapZoom}
           styleId={settings.mapStyleId}
           followHeading={settings.mapFollowsHeading}
-          size={bikeColumn}
+          size={vehicleColumn}
           height={layout.height * 0.3}
         />
       ) : null}
@@ -496,13 +534,17 @@ function LandscapeDash(props: DashSectionProps) {
 
   const centerPanel = (
     <View style={{ width: centerColumn, alignItems: 'center', justifyContent: 'space-between' }}>
-      <RpmBar
-        rpm={telemetry.rpm}
-        redlineRpm={redlineRpm}
-        maxRpm={maxRpm}
-        width={centerColumn}
-        inactive={!hasEngine}
-      />
+      {electric ? (
+        <View style={{ height: 4 }} />
+      ) : (
+        <RpmBar
+          rpm={telemetry.rpm}
+          redlineRpm={redlineRpm}
+          maxRpm={maxRpm}
+          width={centerColumn}
+          inactive={!hasEngine}
+        />
+      )}
       <Gauge
         value={telemetry.speedKph == null ? null : Number(speedDisplay)}
         max={Math.round(maxSpeed)}
@@ -521,6 +563,8 @@ function LandscapeDash(props: DashSectionProps) {
         <GearIndicator gear={gearLabel(telemetry.gear, (telemetry.speedKph ?? 0) > 3)} size={56} />
         {settings.showLeanAngle ? (
           <LeanMeter leanDeg={telemetry.leanDeg} maxLeanDeg={trip.maxLeanDeg} size={96} />
+        ) : settings.showGForce ? (
+          <GForceMeter gLat={telemetry.gLat} gLon={telemetry.gLon} size={82} />
         ) : null}
       </View>
     </View>
@@ -550,9 +594,9 @@ function LandscapeDash(props: DashSectionProps) {
 
   return (
     <View style={{ flex: 1, flexDirection: 'row', gap: columnGap }}>
-      {side === 'left' ? bikePanel : rightPanel}
+      {side === 'left' ? vehiclePanel : rightPanel}
       {centerPanel}
-      {side === 'left' ? rightPanel : bikePanel}
+      {side === 'left' ? rightPanel : vehiclePanel}
     </View>
   );
 }

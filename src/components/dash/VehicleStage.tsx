@@ -17,18 +17,22 @@ import Animated, {
 
 import { useTheme } from '../../theme/ThemeProvider';
 import { rgba } from '../../utils/color';
-import { VectorBike } from '../bike/VectorBike';
+import { CarBodyStyle, VehicleType } from '../../data/vehicles';
+import { VectorVehicle } from '../vehicle/VectorVehicle';
 
-export interface BikeStageProps {
-  /** Cut-out frames, ordered left profile → front. */
+export interface VehicleStageProps {
+  /** Cut-out frames, ordered front → side profile. */
   frames: string[];
+  /** Decides which built-in silhouette stands in until artwork exists. */
+  vehicleType: VehicleType;
+  bodyStyle?: CarBodyStyle;
   width: number;
   height: number;
-  /** Which way the bike faces / which side of the screen it is docked on. */
+  /** Which way the vehicle faces / which side of the screen it is docked on. */
   side: 'left' | 'right';
   /** Plays the 3D entrance once on mount. */
   animateIn?: boolean;
-  /** Live lean angle in degrees; the bike tips with the bike. */
+  /** Live lean angle in degrees; the artwork tips with the vehicle. */
   leanDeg?: number;
   /** 0..1 — drives the forward "drive" lean and the glow intensity. */
   intensity?: number;
@@ -39,15 +43,17 @@ export interface BikeStageProps {
 const ENTRANCE_MS = 1500;
 
 /**
- * The bike itself: a 3D-feeling turntable entrance, then a live subject that
+ * The vehicle itself: a 3D-feeling turntable entrance, then a live subject that
  * leans with the rider and breathes with the engine.
  *
- * With several AI-generated angles it cross-fades real frames as it rotates;
- * with a single cut-out it uses a perspective rotateY, which reads as 3D
- * because the subject has real alpha and a grounded shadow.
+ * With several captured angles it cross-fades real frames as it rotates; with a
+ * single cut-out it uses a perspective rotateY, which reads as 3D because the
+ * subject has real alpha and a grounded shadow.
  */
-export function BikeStage({
+export function VehicleStage({
   frames,
+  vehicleType,
+  bodyStyle,
   width,
   height,
   side,
@@ -56,7 +62,7 @@ export function BikeStage({
   intensity = 0,
   reduceMotion,
   onEntranceEnd,
-}: BikeStageProps) {
+}: VehicleStageProps) {
   const theme = useTheme();
   const progress = useSharedValue(animateIn && !reduceMotion ? 0 : 1);
   const idle = useSharedValue(0);
@@ -162,7 +168,7 @@ export function BikeStage({
       <Animated.View style={[{ width, height, justifyContent: 'center' }, stageStyle]}>
         {hasArtwork ? (
           frames.map((uri, index) => (
-            <BikeFrame
+            <VehicleFrame
               key={uri}
               uri={uri}
               width={width}
@@ -181,7 +187,12 @@ export function BikeStage({
               transform: [{ scaleX: side === 'right' ? -1 : 1 }],
             }}
           >
-            <VectorBike size={Math.min(width, height * 1.6)} wireframe={!theme.effects.blur} />
+            <VectorVehicle
+              type={vehicleType}
+              bodyStyle={bodyStyle}
+              size={Math.min(width, height * 1.7)}
+              wireframe={!theme.effects.blur}
+            />
           </View>
         )}
       </Animated.View>
@@ -216,7 +227,7 @@ export function BikeStage({
   );
 }
 
-function BikeFrame({
+function VehicleFrame({
   uri,
   width,
   height,

@@ -1,30 +1,57 @@
+import type { CarBodyStyle, VehicleType } from '../data/vehicles';
 import type { CustomPidSpec } from '../services/ble/obd';
 import type { CustomThemeSpec } from '../theme/custom';
 
 export type Units = 'metric' | 'imperial';
 
-export interface BikeProfile {
+/**
+ * The angles a vehicle is photographed from. `side` is the hero shot the dash
+ * renders; the rest sharpen the AI's picture of a customised vehicle and feed
+ * the 3D turntable intro.
+ */
+export type VehicleAngle = 'side' | 'frontQuarter' | 'front' | 'rearQuarter' | 'rear';
+
+export interface VehiclePhoto {
+  angle: VehicleAngle;
+  /** The rider's original photo, copied into the vehicle's folder. */
+  sourceUri: string;
+  /** Transparent cut-out produced from it, once processed. */
+  assetUri?: string;
+  /** Set when processing this angle failed, so the UI can explain and retry. */
+  error?: string;
+}
+
+export interface VehicleProfile {
   id: string;
+  type: VehicleType;
   make: string;
   model: string;
   year: number;
   nickname?: string;
   displacementCc?: number;
+  bodyStyle?: CarBodyStyle;
+  /** Colour/modification notes the rider typed; passed to the AI prompt. */
+  colorHint?: string;
   /** Tach full-scale and redline, used to scale the RPM gauge. */
   redlineRpm: number;
   maxRpm: number;
   /** Full-scale of the speedometer. */
   maxSpeedKph: number;
-  /** Main cut-out used on the dash (file:// or bundled fallback marker). */
+  /** Main cut-out used on the dash (file://). */
   heroUri?: string;
-  /** Extra angles for the 3D turntable intro, ordered left -> front. */
+  /** Turntable frames for the intro, ordered front -> side. */
   angleUris?: string[];
-  /** The user's original photo, kept so assets can be regenerated. */
-  sourcePhotoUri?: string;
+  /** Captured originals and their cut-outs, one per angle. */
+  photos: VehiclePhoto[];
   assetOrigin?: 'ai-generated' | 'ai-cutout' | 'vector-fallback';
   /** Sampled from the artwork; used as the accent for the auto theme tint. */
   accentColor?: string;
   createdAt: number;
+}
+
+/** True for battery-electric vehicles, which have no tach to show. */
+export function isElectricProfile(vehicle: Pick<VehicleProfile, 'displacementCc'> | null): boolean {
+  return vehicle?.displacementCc === 0;
 }
 
 export type ThemeChoice = string;
@@ -44,10 +71,10 @@ export interface Settings {
   units: Units;
   clock24h: boolean;
 
-  /** Which side of the screen the bike is docked on. */
-  bikeSide: 'left' | 'right';
-  bikeScale: number;
-  showBike: boolean;
+  /** Which side of the screen the vehicle is docked on. */
+  vehicleSide: 'left' | 'right';
+  vehicleScale: number;
+  showVehicle: boolean;
 
   showMap: boolean;
   mapStyleId: string;

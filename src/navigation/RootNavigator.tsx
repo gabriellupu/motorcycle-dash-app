@@ -60,7 +60,7 @@ export function RootNavigator() {
       {route === 'onboarding' ? <OnboardingFlow /> : null}
       {route === 'ignition' ? <IgnitionScreen /> : null}
       {route === 'dash' ? (
-        <DashScreen animateBike={previousRoute === 'ignition' || previousRoute === 'onboarding'} />
+        <DashScreen animateIn={previousRoute === 'ignition' || previousRoute === 'onboarding'} />
       ) : null}
       {route === 'settings' ? <SettingsScreen /> : null}
     </Animated.View>

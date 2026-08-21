@@ -1,33 +1,54 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 
-import { findEntry, searchBikes, yearsFor } from '../data/motorcycles';
+import { findEntry, isElectric, searchVehicles, yearsFor } from '../data/vehicles';
 import { getMapStyle, latToTileY, lonToTileX, tilesAround } from '../services/map/tiles';
+import { heroFrom, turntableFrom } from '../services/ai/frames';
 import { computeWarnings } from '../services/warnings';
 import { emptyTelemetry } from '../state/types';
-import type { Telemetry, WarningThresholds } from '../state/types';
+import type { Telemetry, VehicleAngle, WarningThresholds } from '../state/types';
 import { hsl, luminance, mix, rgba, toHex } from '../utils/color';
 import { compass, distanceIn, duration, gearLabel, num, speedIn, tempIn } from '../utils/format';
 
-describe('bike catalogue search', () => {
+describe('vehicle catalogue search', () => {
   it('matches a full label', () => {
-    assert.equal(searchBikes('Yamaha MT-09')[0].model, 'MT-09');
+    assert.equal(searchVehicles('Yamaha MT-09', 'motorcycle')[0].model, 'MT-09');
   });
 
   it('matches a squashed model code', () => {
-    assert.equal(searchBikes('mt09')[0].label, 'Yamaha MT-09');
+    assert.equal(searchVehicles('mt09', 'motorcycle')[0].label, 'Yamaha MT-09');
   });
 
   it('matches on make alone', () => {
-    assert.ok(searchBikes('ducati').every((b) => b.make === 'Ducati'));
+    assert.ok(searchVehicles('ducati', 'motorcycle').every((b) => b.make === 'Ducati'));
   });
 
   it('returns nothing for an empty query', () => {
-    assert.deepEqual(searchBikes('   '), []);
+    assert.deepEqual(searchVehicles('   ', 'car'), []);
+  });
+
+  it('keeps bikes and cars in separate namespaces', () => {
+    // Honda and BMW build both; each search must only see its own type.
+    assert.ok(searchVehicles('honda', 'car').every((v) => v.type === 'car'));
+    assert.ok(searchVehicles('honda', 'motorcycle').every((v) => v.type === 'motorcycle'));
+    assert.equal(searchVehicles('Golf GTI', 'motorcycle').length, 0);
+    assert.equal(searchVehicles('Golf GTI', 'car')[0].make, 'Volkswagen');
+  });
+
+  it('finds a car by make and model, with its body style', () => {
+    const entry = findEntry('car', 'Volkswagen', 'Tiguan')!;
+    assert.equal(entry.bodyStyle, 'suv');
+    assert.equal(entry.type, 'car');
+  });
+
+  it('flags electric vehicles, which have no tach', () => {
+    assert.equal(isElectric(findEntry('car', 'Tesla', 'Model 3')!), true);
+    assert.equal(isElectric(findEntry('motorcycle', 'Zero', 'SR/F')!), true);
+    assert.equal(isElectric(findEntry('car', 'Toyota', 'Corolla')!), false);
   });
 
   it('lists years newest first and never past next year', () => {
-    const entry = findEntry('Honda', 'CB650R')!;
+    const entry = findEntry('motorcycle', 'Honda', 'CB650R')!;
     const years = yearsFor(entry);
     assert.ok(years[0] >= years[years.length - 1]);
     assert.ok(years[0] <= new Date().getFullYear() + 1);
@@ -156,5 +177,43 @@ describe('warning lamps', () => {
       channels,
     );
     assert.equal(lamps.find((l) => l.id === 'mil')!.active, true);
+  });
+});
+
+describe('artwork frame selection', () => {
+  const photo = (angle: VehicleAngle, assetUri?: string, error?: string) => ({
+    angle,
+    sourceUri: `file:///src-${angle}.jpg`,
+    assetUri,
+    error,
+  });
+
+  it('renders the side view on the dash when there is one', () => {
+    const photos = [photo('front', 'file:///front.png'), photo('side', 'file:///side.png')];
+    assert.equal(heroFrom(photos), 'file:///side.png');
+  });
+
+  it('falls back to any processed angle when the side shot failed', () => {
+    const photos = [photo('side', undefined, 'timed out'), photo('rear', 'file:///rear.png')];
+    assert.equal(heroFrom(photos), 'file:///rear.png');
+  });
+
+  it('has no hero when nothing processed', () => {
+    assert.equal(heroFrom([photo('side', undefined, 'failed')]), undefined);
+    assert.deepEqual(turntableFrom([photo('side', undefined, 'failed')]), []);
+  });
+
+  it('orders the turntable front → side and skips missing angles', () => {
+    const photos = [
+      photo('rear', 'file:///rear.png'),
+      photo('side', 'file:///side.png'),
+      photo('front', 'file:///front.png'),
+    ];
+    // rear is not part of the intro; front leads, side lands.
+    assert.deepEqual(turntableFrom(photos), ['file:///front.png', 'file:///side.png']);
+  });
+
+  it('degrades to a single frame when only the side view exists', () => {
+    assert.deepEqual(turntableFrom([photo('side', 'file:///side.png')]), ['file:///side.png']);
   });
 });

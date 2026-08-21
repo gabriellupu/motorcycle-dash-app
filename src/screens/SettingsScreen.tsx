@@ -4,15 +4,23 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, ScrollView, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { VectorBike } from '../components/bike/VectorBike';
+import { AngleDiagram } from '../components/vehicle/AngleDiagram';
+import { VectorVehicle } from '../components/vehicle/VectorVehicle';
 import { ThemePicker } from '../components/settings/ThemePicker';
 import { Button, Field, SectionTitle, Segmented, SettingRow, Slider, Toggle } from '../components/ui/Controls';
 import { Panel } from '../components/ui/Panel';
 import { ScreenBackground } from '../components/ui/ScreenBackground';
 import { Txt } from '../components/ui/Txt';
 import { goBack, resetTo } from '../navigation/router';
-import { copyIntoBike, deleteBikeAssets, readAsBase64 } from '../services/ai/assetStore';
-import { createBikeArtwork, describeArtworkError, turntableAngles } from '../services/ai/bikeArtwork';
+import { copyIntoVehicle, deleteVehicleAssets } from '../services/ai/assetStore';
+import { ANGLE_LABEL, captureAngles } from '../services/ai/prompts';
+import {
+  CaptureInput,
+  createVehicleArtwork,
+  describeArtworkError,
+  heroFrom,
+  turntableFrom,
+} from '../services/ai/vehicleArtwork';
 import { IMAGE_MODELS, isConfigured, verifyApiKey } from '../services/ai/gemini';
 import { bleService } from '../services/ble/BleService';
 import { CUSTOM_PID_PRESETS } from '../services/ble/obd';
@@ -20,10 +28,11 @@ import { MAP_STYLES } from '../services/map/tiles';
 import { imuService } from '../services/sensors/imuService';
 import { useAppStore } from '../state/appStore';
 import { useLiveStore } from '../state/liveStore';
+import { VehicleAngle } from '../state/types';
 import { CUSTOM_THEME_ID } from '../theme/custom';
 import { useTheme } from '../theme/ThemeProvider';
 import { listThemes } from '../theme/themes';
-import { hsl } from '../utils/color';
+import { hsl, rgba } from '../utils/color';
 import { pressureUnit, tempUnit } from '../utils/format';
 
 /** Everything is configurable here; the dash itself stays uncluttered. */
@@ -57,7 +66,7 @@ export function SettingsScreen() {
         >
           <LookSection />
           <LayoutSection />
-          <BikeSection />
+          <VehicleSection />
           <DataSection />
           <AlertsSection />
           <AiSection />
@@ -192,7 +201,7 @@ function LookSection() {
 
       <SettingRow
         title="Startup sequence"
-        subtitle="Cluster self-test and the 3D bike intro on launch"
+        subtitle="Cluster self-test and the 3D vehicle intro on launch"
         right={
           <Toggle
             value={settings.startupSequence}
@@ -237,17 +246,17 @@ function LayoutSection() {
         }
       />
       <SettingRow
-        title="Show the bike"
-        right={<Toggle value={settings.showBike} onChange={(showBike) => patch({ showBike })} />}
+        title="Show the vehicle"
+        right={<Toggle value={settings.showVehicle} onChange={(showVehicle) => patch({ showVehicle })} />}
       />
       <SettingRow
-        title="Bike side"
+        title="Vehicle side"
         right={
           <Segmented
             compact
             style={{ width: 140 }}
-            value={settings.bikeSide}
-            onChange={(bikeSide) => patch({ bikeSide })}
+            value={settings.vehicleSide}
+            onChange={(vehicleSide) => patch({ vehicleSide })}
             options={[
               { value: 'left', label: 'Left' },
               { value: 'right', label: 'Right' },
@@ -255,13 +264,13 @@ function LayoutSection() {
           />
         }
       />
-      <SettingRow title="Bike size">
+      <SettingRow title="Vehicle size">
         <Slider
-          value={settings.bikeScale}
+          value={settings.vehicleScale}
           min={0.7}
           max={1.3}
           step={0.05}
-          onChange={(bikeScale) => patch({ bikeScale })}
+          onChange={(vehicleScale) => patch({ vehicleScale })}
           format={(v) => `${Math.round(v * 100)}%`}
         />
       </SettingRow>
@@ -308,7 +317,7 @@ function LayoutSection() {
 
       <SettingRow
         title="Lean angle"
-        subtitle="From the phone's accelerometer"
+        subtitle="From the phone's accelerometer — bikes only"
         right={
           <Toggle
             value={settings.showLeanAngle}
@@ -319,7 +328,7 @@ function LayoutSection() {
       {settings.showLeanAngle ? (
         <SettingRow
           title="Level the lean sensor"
-          subtitle={`Current offset ${settings.leanOffsetDeg.toFixed(1)}° — hold the bike upright, then tap`}
+          subtitle={`Current offset ${settings.leanOffsetDeg.toFixed(1)}° — hold the vehicle level, then tap`}
           right={
             <Button
               label="Level"
@@ -337,6 +346,13 @@ function LayoutSection() {
         />
       ) : null}
       <SettingRow
+        title="G-force meter"
+        subtitle="Lateral and longitudinal G — the car equivalent of the lean meter"
+        right={
+          <Toggle value={settings.showGForce} onChange={(showGForce) => patch({ showGForce })} />
+        }
+      />
+      <SettingRow
         title="Trip stats"
         subtitle="Distance and moving time in the status row"
         right={
@@ -350,13 +366,13 @@ function LayoutSection() {
   );
 }
 
-/* -------------------------------------------------------------------- Bike */
+/* ----------------------------------------------------------------- Vehicle */
 
-function BikeSection() {
+function VehicleSection() {
   const theme = useTheme();
   const settings = useAppStore((s) => s.settings);
-  const bike = useAppStore((s) => s.bike);
-  const patchBike = useAppStore((s) => s.patchBike);
+  const vehicle = useAppStore((s) => s.vehicle);
+  const patchVehicle = useAppStore((s) => s.patchVehicle);
   const garage = useAppStore((s) => s.garage);
   const selectFromGarage = useAppStore((s) => s.selectFromGarage);
   const removeFromGarage = useAppStore((s) => s.removeFromGarage);
@@ -364,45 +380,50 @@ function BikeSection() {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const regenerate = useCallback(
-    async (source: 'render' | 'photo') => {
-      if (!bike) return;
+  /**
+   * Re-shoot one angle (or all of them) without leaving Settings: pick a photo,
+   * run it through the same pipeline onboarding uses, and merge the result into
+   * the vehicle's photo set.
+   */
+  const reshoot = useCallback(
+    async (angle: VehicleAngle) => {
+      if (!vehicle) return;
       setError(null);
       try {
-        let photoBase64: string | undefined;
-        let sourcePhotoUri = bike.sourcePhotoUri;
-
-        if (source === 'photo') {
-          const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-          if (!permission.granted) {
-            setError('Photo library permission is needed.');
-            return;
-          }
-          const picked = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
-            quality: 0.9,
-          });
-          if (picked.canceled || !picked.assets?.length) return;
-          sourcePhotoUri = await copyIntoBike(bike.id, 'source-photo', picked.assets[0].uri);
-          photoBase64 = await readAsBase64(sourcePhotoUri);
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          setError('Photo library permission is needed.');
+          return;
         }
+        const picked = await ImagePicker.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          quality: 0.9,
+        });
+        if (picked.canceled || !picked.assets?.length) return;
 
-        setBusy('Generating artwork…');
-        const outcome = await createBikeArtwork({
-          bike,
+        setBusy(`Processing the ${ANGLE_LABEL[angle].toLowerCase()} shot…`);
+        const sourceUri = await copyIntoVehicle(vehicle.id, `photo-${angle}`, picked.assets[0].uri);
+        const inputs: CaptureInput[] = [{ angle, sourceUri }];
+
+        const outcome = await createVehicleArtwork({
+          vehicle,
           apiKey: settings.geminiApiKey,
           model: settings.geminiModel,
-          mode: source === 'photo' ? 'photo-cutout' : 'render',
-          angles: turntableAngles(settings.aiTurntable && source === 'render'),
-          photoBase64,
+          mode: 'photo-cutout',
+          photos: inputs,
           onProgress: (progress) => setBusy(progress.message),
         });
 
-        patchBike({
-          heroUri: outcome.heroUri,
-          angleUris: outcome.angleUris,
-          sourcePhotoUri,
-          assetOrigin: outcome.origin,
+        // Merge: this angle replaces its old entry, the others stay as they are.
+        const merged = [
+          ...vehicle.photos.filter((p) => p.angle !== angle),
+          ...outcome.photos,
+        ];
+        patchVehicle({
+          photos: merged,
+          heroUri: heroFrom(merged),
+          angleUris: turntableFrom(merged),
+          assetOrigin: 'ai-cutout',
         });
       } catch (err) {
         setError(describeArtworkError(err));
@@ -410,42 +431,77 @@ function BikeSection() {
         setBusy(null);
       }
     },
-    [bike, patchBike, settings.aiTurntable, settings.geminiApiKey, settings.geminiModel],
+    [patchVehicle, settings.geminiApiKey, settings.geminiModel, vehicle],
   );
 
-  if (!bike) {
+  const stockRender = useCallback(async () => {
+    if (!vehicle) return;
+    setError(null);
+    try {
+      setBusy('Rendering from the catalogue…');
+      const outcome = await createVehicleArtwork({
+        vehicle,
+        apiKey: settings.geminiApiKey,
+        model: settings.geminiModel,
+        mode: 'render',
+        angles: settings.aiTurntable ? ['side', 'frontQuarter', 'front'] : ['side'],
+        onProgress: (progress) => setBusy(progress.message),
+      });
+      patchVehicle({
+        photos: outcome.photos,
+        heroUri: outcome.heroUri,
+        angleUris: outcome.angleUris,
+        assetOrigin: outcome.origin,
+      });
+    } catch (err) {
+      setError(describeArtworkError(err));
+    } finally {
+      setBusy(null);
+    }
+  }, [patchVehicle, settings.aiTurntable, settings.geminiApiKey, settings.geminiModel, vehicle]);
+
+  if (!vehicle) {
     return (
       <>
-        <SectionTitle>Bike</SectionTitle>
+        <SectionTitle>Vehicle</SectionTitle>
         <SettingRow
-          title="No bike set up yet"
-          subtitle="Run onboarding to pick a make, model and artwork"
+          title="No vehicle set up yet"
+          subtitle="Run onboarding to pick a bike or car and shoot its photos"
           right={<Button label="Set up" size="sm" onPress={() => resetTo('onboarding')} />}
         />
       </>
     );
   }
 
+  const angles = captureAngles(vehicle.type);
+  const keyed = isConfigured(settings.geminiApiKey);
+
   return (
     <>
-      <SectionTitle>Bike</SectionTitle>
+      <SectionTitle>Vehicle</SectionTitle>
 
-      <SettingRow title={`${bike.year} ${bike.make} ${bike.model}`} subtitle="Tap to run setup again"
+      <SettingRow
+        title={`${vehicle.year} ${vehicle.make} ${vehicle.model}`}
+        subtitle={`${vehicle.type === 'car' ? 'Car' : 'Motorcycle'} · tap to run setup again`}
         onPress={() => resetTo('onboarding')}
-        right={<Txt variant="label" size={16} dim>›</Txt>}
+        right={
+          <Txt variant="label" size={16} dim>
+            ›
+          </Txt>
+        }
       />
 
-      <SettingRow title="Artwork" subtitle={busy ?? 'Regenerate or replace the bike image'}>
+      <SettingRow title="Artwork" subtitle={busy ?? 'The cut-out the dash renders'}>
         <View style={{ gap: 10 }}>
           <Panel alt style={{ alignItems: 'center', paddingVertical: 14 }}>
-            {bike.heroUri ? (
+            {vehicle.heroUri ? (
               <Image
-                source={{ uri: bike.heroUri }}
+                source={{ uri: vehicle.heroUri }}
                 style={{ width: '100%', height: 120 }}
                 contentFit="contain"
               />
             ) : (
-              <VectorBike size={220} />
+              <VectorVehicle type={vehicle.type} bodyStyle={vehicle.bodyStyle} size={220} />
             )}
           </Panel>
           {busy ? (
@@ -458,39 +514,33 @@ function BikeSection() {
           ) : (
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <Button
-                label="AI render"
+                label="Stock render"
                 size="sm"
                 variant="secondary"
-                disabled={!isConfigured(settings.geminiApiKey)}
-                onPress={() => void regenerate('render')}
+                disabled={!keyed}
+                onPress={() => void stockRender()}
                 style={{ flex: 1 }}
               />
               <Button
-                label="From photo"
-                size="sm"
-                variant="secondary"
-                disabled={!isConfigured(settings.geminiApiKey)}
-                onPress={() => void regenerate('photo')}
-                style={{ flex: 1 }}
-              />
-              <Button
-                label="Vector"
+                label="Built-in silhouette"
                 size="sm"
                 variant="ghost"
                 onPress={() => {
-                  deleteBikeAssets(bike.id);
-                  patchBike({
+                  deleteVehicleAssets(vehicle.id);
+                  patchVehicle({
                     heroUri: undefined,
                     angleUris: undefined,
+                    photos: [],
                     assetOrigin: 'vector-fallback',
                   });
                 }}
+                style={{ flex: 1 }}
               />
             </View>
           )}
-          {!isConfigured(settings.geminiApiKey) ? (
+          {!keyed ? (
             <Txt variant="caption" faint>
-              Add a Gemini API key below to enable AI artwork.
+              Add a Gemini API key below to process photos.
             </Txt>
           ) : null}
           {error ? (
@@ -501,41 +551,100 @@ function BikeSection() {
         </View>
       </SettingRow>
 
+      <SettingRow
+        title="Photos"
+        subtitle="Re-shoot any angle — the side view is what the dash renders"
+      >
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+          {angles.map((angle) => {
+            const photo = vehicle.photos.find((p) => p.angle === angle);
+            return (
+              <View key={angle} style={{ width: '50%', padding: 4 }}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Re-shoot the ${ANGLE_LABEL[angle]} photo`}
+                  disabled={!!busy || !keyed}
+                  onPress={() => void reshoot(angle)}
+                  style={({ pressed }) => ({
+                    borderRadius: theme.shape.radiusSm,
+                    borderWidth: theme.shape.borderWidth,
+                    borderColor: photo?.assetUri ? theme.colors.border : theme.colors.textFaint,
+                    borderStyle: photo?.assetUri ? 'solid' : 'dashed',
+                    padding: 8,
+                    gap: 6,
+                    opacity: !keyed ? 0.5 : pressed ? 0.6 : 1,
+                  })}
+                >
+                  <View
+                    style={{
+                      height: 74,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      backgroundColor: rgba(theme.colors.text, 0.05),
+                      borderRadius: theme.shape.radiusSm,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {photo?.assetUri ? (
+                      <Image
+                        source={{ uri: photo.assetUri }}
+                        style={{ width: '100%', height: '100%' }}
+                        contentFit="contain"
+                      />
+                    ) : (
+                      <View style={{ alignItems: 'center', gap: 2 }}>
+                        <AngleDiagram angle={angle} type={vehicle.type} size={44} />
+                        <Txt variant="label" size={8} faint>
+                          {photo?.error ? 'Failed' : 'Not shot'}
+                        </Txt>
+                      </View>
+                    )}
+                  </View>
+                  <Txt variant="label" size={9} dim>
+                    {ANGLE_LABEL[angle]}
+                  </Txt>
+                </Pressable>
+              </View>
+            );
+          })}
+        </View>
+      </SettingRow>
+
       <SettingRow title="Redline" subtitle="Where the shift lights go red">
         <Slider
-          value={bike.redlineRpm}
-          min={4000}
+          value={vehicle.redlineRpm}
+          min={3000}
           max={18000}
           step={250}
           onChange={(redlineRpm) =>
-            patchBike({ redlineRpm, maxRpm: Math.max(bike.maxRpm, redlineRpm + 500) })
+            patchVehicle({ redlineRpm, maxRpm: Math.max(vehicle.maxRpm, redlineRpm + 500) })
           }
           format={(v) => `${v.toLocaleString()} rpm`}
         />
       </SettingRow>
       <SettingRow title="Tach full scale">
         <Slider
-          value={bike.maxRpm}
-          min={bike.redlineRpm + 250}
+          value={vehicle.maxRpm}
+          min={vehicle.redlineRpm + 250}
           max={20000}
           step={250}
-          onChange={(maxRpm) => patchBike({ maxRpm })}
+          onChange={(maxRpm) => patchVehicle({ maxRpm })}
           format={(v) => `${v.toLocaleString()} rpm`}
         />
       </SettingRow>
       <SettingRow title="Speedometer full scale">
         <Slider
-          value={bike.maxSpeedKph}
+          value={vehicle.maxSpeedKph}
           min={80}
-          max={320}
+          max={340}
           step={10}
-          onChange={(maxSpeedKph) => patchBike({ maxSpeedKph })}
+          onChange={(maxSpeedKph) => patchVehicle({ maxSpeedKph })}
           format={(v) => `${v} km/h`}
         />
       </SettingRow>
 
       {garage.length > 1 ? (
-        <SettingRow title="Garage" subtitle="Switch between saved bikes">
+        <SettingRow title="Garage" subtitle="Switch between saved vehicles">
           <View style={{ gap: 8 }}>
             {garage.map((entry) => (
               <View key={entry.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -544,17 +653,24 @@ function BikeSection() {
                   style={{ flex: 1 }}
                   accessibilityRole="button"
                 >
-                  <Txt variant="body" size={14} color={entry.id === bike.id ? theme.colors.accent : theme.colors.text}>
+                  <Txt
+                    variant="body"
+                    size={14}
+                    color={entry.id === vehicle.id ? theme.colors.accent : theme.colors.text}
+                  >
                     {`${entry.year} ${entry.make} ${entry.model}`}
                   </Txt>
+                  <Txt variant="caption" size={10} faint>
+                    {entry.type === 'car' ? 'Car' : 'Motorcycle'}
+                  </Txt>
                 </Pressable>
-                {entry.id !== bike.id ? (
+                {entry.id !== vehicle.id ? (
                   <Button
                     label="Remove"
                     size="sm"
                     variant="ghost"
                     onPress={() => {
-                      deleteBikeAssets(entry.id);
+                      deleteVehicleAssets(entry.id);
                       removeFromGarage(entry.id);
                     }}
                   />

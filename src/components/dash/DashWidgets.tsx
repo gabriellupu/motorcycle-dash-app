@@ -236,6 +236,68 @@ export function LeanMeter({
   );
 }
 
+/* -------------------------------------------------------------- GForceMeter */
+
+/**
+ * Lateral/longitudinal G ball — the car equivalent of the lean meter.
+ * Reads the same accelerometer, plotted as a dot in a two-axis circle.
+ */
+export function GForceMeter({
+  gLat,
+  gLon,
+  size = 104,
+  fullScaleG = 1.2,
+}: {
+  gLat: number | null;
+  gLon: number | null;
+  size?: number;
+  fullScaleG?: number;
+}) {
+  const theme = useTheme();
+  const r = size / 2 - 8;
+  const cx = size / 2;
+  const clamp = (v: number | null) => Math.max(-1, Math.min(1, (v ?? 0) / fullScaleG));
+  const x = cx + clamp(gLat) * r;
+  const y = cx + clamp(gLon) * r;
+  const magnitude = Math.hypot(gLat ?? 0, gLon ?? 0);
+  const missing = gLat == null && gLon == null;
+
+  return (
+    <View style={{ width: size, alignItems: 'center' }}>
+      {/* Both axes matter here, so the whole circle stays visible. */}
+      <View style={{ width: size, height: size }}>
+        <Svg width={size} height={size}>
+          <Circle cx={cx} cy={cx} r={r} stroke={theme.colors.gaugeTrack} strokeWidth={2} fill="none" />
+          <Circle
+            cx={cx}
+            cy={cx}
+            r={r * 0.5}
+            stroke={theme.colors.gaugeTrack}
+            strokeWidth={1}
+            fill="none"
+          />
+          <Line x1={cx - r} y1={cx} x2={cx + r} y2={cx} stroke={theme.colors.textFaint} strokeWidth={1} />
+          <Line x1={cx} y1={cx - r} x2={cx} y2={cx + r} stroke={theme.colors.textFaint} strokeWidth={1} />
+          <Circle
+            cx={x}
+            cy={y}
+            r={6}
+            fill={missing ? theme.colors.textFaint : theme.colors.accent}
+          />
+        </Svg>
+      </View>
+      <View style={{ alignItems: 'center', marginTop: -6 }}>
+        <Txt variant="value" size={18}>
+          {missing ? EMPTY : `${magnitude.toFixed(2)}g`}
+        </Txt>
+        <Txt variant="label" size={8} faint>
+          G-force
+        </Txt>
+      </View>
+    </View>
+  );
+}
+
 /* -------------------------------------------------------------- StatusChip */
 
 export function StatusChip({

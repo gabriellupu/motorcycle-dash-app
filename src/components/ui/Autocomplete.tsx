@@ -1,30 +1,38 @@
 import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 
-import { BikeCatalogEntry, searchBikes } from '../../data/motorcycles';
+import { VehicleCatalogEntry, VehicleType, searchVehicles } from '../../data/vehicles';
 import { useTheme } from '../../theme/ThemeProvider';
 
 import { Field } from './Controls';
 import { Txt } from './Txt';
 
 interface Props {
-  onSelect: (entry: BikeCatalogEntry) => void;
-  /** Called when the rider's bike is not in the catalogue. */
+  type: VehicleType;
+  onSelect: (entry: VehicleCatalogEntry) => void;
+  /** Called when the rider's vehicle is not in the catalogue. */
   onManual: (query: string) => void;
   placeholder?: string;
   maxHeight?: number;
 }
 
 /**
- * Make/model search over the bundled catalogue.
+ * Make/model search over the bundled catalogue, scoped to the chosen vehicle
+ * type.
  *
  * Matching is forgiving — "mt09", "yam mt", "Yamaha MT-09" all land on the same
- * bike — and there is always an escape hatch for a bike we do not list.
+ * vehicle — and there is always an escape hatch for something we do not list.
  */
-export function BikeAutocomplete({ onSelect, onManual, placeholder, maxHeight = 260 }: Props) {
+export function VehicleAutocomplete({
+  type,
+  onSelect,
+  onManual,
+  placeholder,
+  maxHeight = 260,
+}: Props) {
   const theme = useTheme();
   const [query, setQuery] = useState('');
-  const results = useMemo(() => searchBikes(query, 14), [query]);
+  const results = useMemo(() => searchVehicles(query, type, 14), [query, type]);
   const showManual = query.trim().length > 2;
 
   return (
@@ -68,6 +76,7 @@ export function BikeAutocomplete({ onSelect, onManual, placeholder, maxHeight = 
                   </Txt>
                   <Txt variant="caption" dim>
                     {entry.displacementCc ? `${entry.displacementCc} cc · ` : 'Electric · '}
+                    {entry.bodyStyle ? `${entry.bodyStyle} · ` : ''}
                     {entry.firstYear}–
                     {entry.lastYear > new Date().getFullYear() ? 'now' : entry.lastYear}
                   </Txt>
